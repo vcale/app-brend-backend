@@ -5,111 +5,105 @@ const Anthropic = require('@anthropic-ai/sdk');
 const NodeCache = require('node-cache');
 const app = express();
 
+// Configurar CORS para permitir solo el frontend en Vercel
 const cors = require('cors');
-app.use(cors());
+app.use(cors({
+  origin: 'https://app-brend01-iyc5gca3b-samuels-projects-548af230.vercel.app',
+  methods: ['POST'],
+  allowedHeaders: ['Content-Type']
+}));
 
 app.use(express.json());
 
 // Verificación de la clave API de Anthropic
-console.log('Clave API leída:', process.env.ANTHROPIC_API_KEY ? 'Definida' : 'No definida');
-if (!process.env.ANTHROPIC_API_KEY) {
+const apiKey = process.env.ANTHROPIC_API_KEY;
+console.log('Clave API leída:', apiKey ? 'Definida' : 'No definida');
+if (!apiKey) {
   console.error('Error: Clave API de Anthropic no definida en Secrets.');
   process.exit(1);
 }
 
-// Inicialización de Anthropic con validación
+// Inicialización de Anthropic
 let anthropic;
 try {
-  anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-  });
+  anthropic = new Anthropic({ apiKey });
   console.log('Instancia de Anthropic creada:', anthropic ? 'Éxito' : 'Fallo');
 } catch (initError) {
   console.error('Error al inicializar Anthropic:', initError.message);
   process.exit(1);
 }
 
-const cache = new NodeCache({ stdTTL: 3600 });
+const cache = new NodeCache({ stdTTL: 3600 }); // 1 hora de caché
 
 app.post('/generate', async (req, res) => {
   console.log('Solicitud recibida:', new Date().toISOString());
-  const { platform, contentType, tone, targetAge, targetAudience, contentGoal, region, scriptLength, charLength, topic } = req.body;
-  const cacheKey = JSON.stringify({ platform, contentType, tone, targetAge, targetAudience, contentGoal, region, scriptLength, charLength, topic });
+  const {
+    platform = '', contentType = '', tone = 'neutral', targetAge = '18-24',
+    targetAudience = 'público general', contentGoal = 'entretener',
+    region = 'Global', scriptLength = '1min', charLength = '500', topic = ''
+  } = req.body;
 
+  // Validación estricta
   if (!platform || !contentType || !topic) {
+    console.warn('Faltan campos requeridos:', { platform, contentType, topic });
     return res.status(400).json({
       script: { gancho: "Error", problema: "Error", solucion: "Error", cta: "Error" },
-      recommendations: ["Faltan datos requeridos (plataforma, tipo de contenido o tema)."],
+      recommendations: ["Faltan datos requeridos: plataforma, tipo de contenido o tema."],
       viralityScore: 0,
       qualityScore: 0,
-      reasons: ["Completa todos los campos."],
+      reasons: ["Completa todos los campos obligatorios."]
     });
   }
 
+  const cacheKey = JSON.stringify({ platform, contentType, tone, targetAge, targetAudience, contentGoal, region, scriptLength, charLength, topic });
   const cachedResult = cache.get(cacheKey);
   if (cachedResult) {
-    console.log('Usando caché');
+    console.log('Usando caché para:', cacheKey);
     return res.json(cachedResult);
   }
 
   const prompt = `
-    Eres un creador de guiones profesional con experiencia en creación de contenido para redes sociales, específicamente para video con amplia experiencia escribiendo guiones virales y de impacto. Genera un guión altamente profesional y detallado para un ${contentType} en ${platform}, con tono ${tone || 'neutral'}, dirigido a ${targetAge || '18-24'} años de ${targetAudience || 'público general'} en ${region || 'Global'}, que busque ${contentGoal || 'entretener'}, con una duración de ${scriptLength || '1min'} y aproximadamente ${charLength || '500'} caracteres, sobre el tema "${topic}". Ajusta el contenido según las características culturales y de audiencia de ${region}. El guión debe incluir:
-
-    1. **Gancho**: Una introducción impactante para captar la atención inmediatamente.
-    2. **Presentación del problema**: Describe un problema relevante para mantener el interés.
-    3. **Solución del problema**: Ofrece una solución clara y atractiva.
-    4. **CTA (Llamado a la acción)**: Una instrucción corta, específica y persuasiva para cerrar.
-
-    Asegúrate de que el guión sea detallado, adaptado al tipo de contenido (${contentType}) y optimizado para la plataforma (${platform}). Además, proporciona:
-    - recommendations: 3-5 recomendaciones específicas para mejorar el impacto.
-    - viralityScore: puntuación de viralidad (1-10) con explicación.
-    - qualityScore: puntuación de calidad (1-10) con explicación.
-    - reasons: 3-5 razones por las que este contenido funcionará.
-
-    Devuelve SOLO un objeto JSON válido con las claves: script (con subsecciones gancho, problema, solucion, cta), recommendations, viralityScore, qualityScore, reasons. No incluyas texto adicional fuera del JSON.
+    Eres un creador de guiones profesional especializado en videos virales para redes sociales. Genera un guión para un ${contentType} en ${platform} sobre "${topic}". Usa un tono ${tone}, dirigido a ${targetAge} años (${targetAudience}, ${region}), con objetivo ${contentGoal}, duración ${scriptLength} y ~${charLength} caracteres. Incluye:
+    1. Gancho: Captura la atención al instante.
+    2. Problema: Describe un problema relevante.
+    3. Solución: Ofrece una solución atractiva.
+    4. CTA: Cierra con un llamado persuasivo.
+    Optimiza para ${platform} y adapta a ${region}. Devuelve solo un JSON con: script (gancho, problema, solucion, cta), recommendations (3-5), viralityScore (1-10), qualityScore (1-10), reasons (3-5).
   `;
 
   console.time('Anthropic');
-
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-3-haiku-20240307', // Modelo corregido
+      model: 'claude-3-haiku-20240307',
       max_tokens: 1000,
       messages: [{ role: 'user', content: prompt }],
     });
     console.timeEnd('Anthropic');
 
     const generatedText = response.content[0].text;
-    console.log('Texto generado por Anthropic:', generatedText);
+    console.log('Respuesta de Anthropic:', generatedText);
 
     const jsonMatch = generatedText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.error('No se encontró JSON válido. Texto completo:', generatedText);
-      throw new Error('Respuesta de Anthropic no contiene JSON válido');
+      throw new Error('No se encontró JSON válido en la respuesta');
     }
 
-    let result;
-    try {
-      result = JSON.parse(jsonMatch[0].trim());
-    } catch (parseError) {
-      console.error('Error al parsear JSON:', parseError.message, 'Texto extraído:', jsonMatch[0]);
-      throw new Error('JSON inválido en la respuesta de Anthropic: ' + parseError.message);
-    }
-
+    const result = JSON.parse(jsonMatch[0].trim());
     if (!result.script || !result.recommendations || !result.viralityScore || !result.qualityScore || !result.reasons) {
       throw new Error('Respuesta incompleta: faltan claves requeridas');
     }
 
     cache.set(cacheKey, result);
+    console.log('Resultado enviado:', result);
     res.json(result);
   } catch (error) {
-    console.error('Error en generate:', error.message);
+    console.error('Error en /generate:', error.stack);
     res.status(500).json({
       script: { gancho: "Error al procesar", problema: "", solucion: "", cta: "" },
-      recommendations: ["Revisa tu conexión o intenta de nuevo."],
+      recommendations: ["Intenta de nuevo o revisa tu conexión."],
       viralityScore: 0,
       qualityScore: 0,
-      reasons: [`Error: ${error.message}`],
+      reasons: [`Error: ${error.message}`]
     });
   }
 });
