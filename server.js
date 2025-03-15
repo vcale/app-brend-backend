@@ -10,10 +10,19 @@ const cors = require('cors');
 app.use(cors({
   origin: 'https://app-brend01-iyc5gca3b-samuels-projects-548af230.vercel.app',
   methods: ['POST'],
-  allowedHeaders: ['Content-Type']
+  allowedHeaders: ['Content-Type'],
+  credentials: false // No necesitamos cookies, pero lo explicitamos
 }));
 
 app.use(express.json());
+
+// Middleware para loguear todas las solicitudes entrantes
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} desde ${req.headers.origin || 'desconocido'}`);
+  console.log('Headers:', req.headers);
+  console.log('Body:', req.body);
+  next();
+});
 
 // Verificación de la clave API de Anthropic
 const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -36,7 +45,6 @@ try {
 const cache = new NodeCache({ stdTTL: 3600 }); // 1 hora de caché
 
 app.post('/generate', async (req, res) => {
-  console.log('Solicitud recibida:', new Date().toISOString());
   const {
     platform = '', contentType = '', tone = 'neutral', targetAge = '18-24',
     targetAudience = 'público general', contentGoal = 'entretener',
@@ -106,6 +114,18 @@ app.post('/generate', async (req, res) => {
       reasons: [`Error: ${error.message}`]
     });
   }
+});
+
+// Manejo de errores no capturados
+app.use((err, req, res, next) => {
+  console.error('Error no capturado:', err.stack);
+  res.status(500).json({
+    script: { gancho: "Error interno", problema: "", solucion: "", cta: "" },
+    recommendations: ["Contacta al soporte si persiste."],
+    viralityScore: 0,
+    qualityScore: 0,
+    reasons: [`Error: ${err.message}`]
+  });
 });
 
 const PORT = process.env.PORT || 10000;
