@@ -14,7 +14,7 @@ app.use(express.json());
 console.log('Clave API leída:', process.env.ANTHROPIC_API_KEY ? 'Definida' : 'No definida');
 if (!process.env.ANTHROPIC_API_KEY) {
   console.error('Error: Clave API de Anthropic no definida en Secrets.');
-  process.exit(1); // Termina el servidor si no hay clave
+  process.exit(1);
 }
 
 // Inicialización de Anthropic con validación
@@ -73,7 +73,7 @@ app.post('/generate', async (req, res) => {
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-3-7-sonnet-20250219',
+      model: 'claude-3-sonnet-20240229', // Modelo corregido
       max_tokens: 1000,
       messages: [{ role: 'user', content: prompt }],
     });
