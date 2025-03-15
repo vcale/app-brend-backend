@@ -73,7 +73,7 @@ app.post('/generate', async (req, res) => {
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-3-haiku-20240307', // Modelo actualizado
+      model: 'claude-3-haiku-20240307', // Modelo corregido
       max_tokens: 1000,
       messages: [{ role: 'user', content: prompt }],
     });
