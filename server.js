@@ -5,18 +5,28 @@ const Anthropic = require('@anthropic-ai/sdk');
 const NodeCache = require('node-cache');
 const app = express();
 
-// Configurar CORS para permitir solo el frontend en Vercel
+// Configurar CORS para permitir múltiples orígenes
 const cors = require('cors');
 app.use(cors({
-  origin: 'https://app-brend01-iyc5gca3b-samuels-projects-548af230.vercel.app',
+  origin: (origin, callback) => {
+    const allowedOrigins = [
+      'https://app-brend01-iyc5gca3b-samuels-projects-548af230.vercel.app',
+      'https://app-brend01.vercel.app'
+    ];
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('No permitido por CORS'));
+    }
+  },
   methods: ['POST'],
   allowedHeaders: ['Content-Type'],
-  credentials: false // No necesitamos cookies, pero lo explicitamos
+  credentials: false
 }));
 
 app.use(express.json());
 
-// Middleware para loguear todas las solicitudes entrantes
+// Middleware para loguear solicitudes
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} desde ${req.headers.origin || 'desconocido'}`);
   console.log('Headers:', req.headers);
@@ -32,7 +42,6 @@ if (!apiKey) {
   process.exit(1);
 }
 
-// Inicialización de Anthropic
 let anthropic;
 try {
   anthropic = new Anthropic({ apiKey });
@@ -42,7 +51,7 @@ try {
   process.exit(1);
 }
 
-const cache = new NodeCache({ stdTTL: 3600 }); // 1 hora de caché
+const cache = new NodeCache({ stdTTL: 3600 });
 
 app.post('/generate', async (req, res) => {
   const {
@@ -51,7 +60,6 @@ app.post('/generate', async (req, res) => {
     region = 'Global', scriptLength = '1min', charLength = '500', topic = ''
   } = req.body;
 
-  // Validación estricta
   if (!platform || !contentType || !topic) {
     console.warn('Faltan campos requeridos:', { platform, contentType, topic });
     return res.status(400).json({
@@ -116,7 +124,6 @@ app.post('/generate', async (req, res) => {
   }
 });
 
-// Manejo de errores no capturados
 app.use((err, req, res, next) => {
   console.error('Error no capturado:', err.stack);
   res.status(500).json({
